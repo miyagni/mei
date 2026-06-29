@@ -3,8 +3,20 @@ name = "mei-provider"
 version = "0.1.0"
 edition = "2021"
 
+[features]
+default = ["coding"]
+coding = []
+image = []
+all = []
+codegen = ["dep:ureq"]
+
 [dependencies]
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "2"
 tempfile = "3"
+ureq = { version = "2", optional = true }
+
+[[bin]]
+name = "mei-codegen"
+required-features = ["codegen"]
