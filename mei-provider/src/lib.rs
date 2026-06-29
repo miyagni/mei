@@ -3,6 +3,8 @@
 
 mod credential;
 mod error;
+mod store;
 
 pub use credential::{Credential, OAuthToken};
 pub use error::AuthError;
+pub use store::AuthStore;
