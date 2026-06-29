@@ -1,4 +1,4 @@
-use mei_session::{Entry, LinearSession, SessionId};
+use mei_session::{Entry, LinearSession, NodeId, SessionError, SessionId, TreeSession};
 
 #[test]
 fn compaction_entry_is_detected() {
@@ -45,4 +45,47 @@ fn undo_redo_respect_bounds() {
     assert!(!s.undo()); // already at the start
     assert!(s.redo()); // redoes "a"
     assert!(!s.redo()); // nothing to redo
+}
+
+#[test]
+fn tree_branch_keeps_old_path_out_of_context() {
+    let mut t = TreeSession::new(SessionId::new("s1"), Entry::user("a"));
+    t.push(Entry::assistant("b"));
+    t.push(Entry::user("c")); // a -> b -> c
+
+    // go back to the root and branch: a -> e -> f.
+    t.set_active(t.root_id()).expect("root exists");
+    t.push(Entry::assistant("e"));
+    t.push(Entry::user("f"));
+
+    // the model context is the active path: a, e, f.
+    let context = t.model_context();
+    assert_eq!(
+        context,
+        vec![&Entry::user("a"), &Entry::assistant("e"), &Entry::user("f")]
+    );
+    // but b and c still exist: nodes() sees all 5.
+    assert_eq!(t.nodes().len(), 5);
+}
+
+#[test]
+fn tree_model_context_starts_at_last_compaction() {
+    let mut t = TreeSession::new(SessionId::new("s1"), Entry::user("a"));
+    t.push(Entry::assistant("b"));
+    t.push(Entry::compaction("summary of a,b"));
+    t.push(Entry::user("d")); // a -> b -> compaction -> d
+
+    let context = t.model_context();
+    assert_eq!(
+        context,
+        vec![&Entry::compaction("summary of a,b"), &Entry::user("d")]
+    );
+    assert_eq!(t.nodes().len(), 4);
+}
+
+#[test]
+fn set_active_to_unknown_node_errors() {
+    let mut t = TreeSession::new(SessionId::new("s1"), Entry::user("a"));
+    let err = t.set_active(NodeId::new(99)).unwrap_err();
+    assert!(matches!(err, SessionError::UnknownNode(_)));
 }
