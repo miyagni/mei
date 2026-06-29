@@ -75,6 +75,11 @@ version = "0.1.0"
 [[package]]
 name = "mei-provider"
 version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror",
+]
 
 [[package]]
 name = "mei-session"
