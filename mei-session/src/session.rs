@@ -1,4 +1,8 @@
+use std::io::Write;
+use std::path::Path;
+
 use serde::{Deserialize, Serialize};
+use tempfile::NamedTempFile;
 
 use crate::entry::Entry;
 use crate::error::SessionError;
@@ -26,6 +30,29 @@ impl Session {
         let session: Session = serde_json::from_str(s)?;
         session.validate()?;
         Ok(session)
+    }
+
+    /// Writes the session to `path` as canonical JSON.
+    ///
+    /// Atomic: writes a sibling temp file and renames it over the target, so a
+    /// crash mid-write cannot truncate an existing session — `load` always sees
+    /// either the old session or the fully written new one.
+    pub fn save(&self, path: impl AsRef<Path>) -> Result<(), SessionError> {
+        let path = path.as_ref();
+        let dir = match path.parent() {
+            Some(parent) if !parent.as_os_str().is_empty() => parent,
+            _ => Path::new("."),
+        };
+        let mut tmp = NamedTempFile::new_in(dir)?;
+        tmp.write_all(self.to_json()?.as_bytes())?;
+        tmp.persist(path).map_err(|e| e.error)?;
+        Ok(())
+    }
+
+    /// Reads a session from `path`, validating invariants.
+    pub fn load(path: impl AsRef<Path>) -> Result<Self, SessionError> {
+        let json = std::fs::read_to_string(path)?;
+        Session::from_json(&json)
     }
 
     /// The session's id, regardless of kind.

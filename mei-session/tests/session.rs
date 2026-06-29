@@ -160,3 +160,45 @@ fn round_trip_preserves_tool_call_and_result() {
 
     assert_eq!(session, back);
 }
+
+#[test]
+fn save_then_load_round_trips_through_a_real_file() {
+    let dir = tempfile::tempdir().expect("tempdir"); // removed (with its files) on drop
+    let path = dir.path().join("s1.json");
+
+    let mut s = LinearSession::new(SessionId::new("s1"));
+    s.push(Entry::user("hi"));
+    s.push(Entry::assistant("hello"));
+    let session = Session::Linear(s);
+
+    session.save(&path).expect("save");
+    assert!(path.exists()); // save really hit the disk
+    let back = Session::load(&path).expect("load");
+
+    assert_eq!(session, back);
+}
+
+#[test]
+fn load_missing_file_errors() {
+    // The fs path is reached, finds nothing, and writes nothing to disk.
+    assert!(Session::load("this/path/does/not/exist.json").is_err());
+}
+
+#[test]
+fn save_atomically_replaces_an_existing_file() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let path = dir.path().join("s.json");
+
+    let mut a = LinearSession::new(SessionId::new("s"));
+    a.push(Entry::user("first"));
+    Session::Linear(a).save(&path).expect("save a");
+
+    let mut b = LinearSession::new(SessionId::new("s"));
+    b.push(Entry::user("second"));
+    let session_b = Session::Linear(b);
+    session_b
+        .save(&path)
+        .expect("save b over the existing file");
+
+    assert_eq!(Session::load(&path).expect("load"), session_b);
+}
