@@ -1,0 +1,9 @@
+[package]
+name = "mei"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+mei-agent = { path = "../mei-agent" }
+mei-session = { path = "../mei-session" }
+mei-provider = { path = "../mei-provider" }
