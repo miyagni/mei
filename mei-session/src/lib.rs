@@ -12,7 +12,7 @@ mod linear;
 mod session;
 mod tree;
 
-pub use entry::Entry;
+pub use entry::{Entry, ToolCall, ToolResult};
 pub use error::SessionError;
 pub use ids::{NodeId, SessionId};
 pub use linear::LinearSession;

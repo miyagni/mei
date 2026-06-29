@@ -1,4 +1,7 @@
-use mei_session::{Entry, LinearSession, NodeId, Session, SessionError, SessionId, TreeSession};
+use mei_session::{
+    Entry, LinearSession, NodeId, Session, SessionError, SessionId, ToolCall, ToolResult,
+    TreeSession,
+};
 
 #[test]
 fn compaction_entry_is_detected() {
@@ -134,4 +137,26 @@ fn session_model_context_reads_without_matching_kind() {
         session.model_context(),
         vec![&Entry::user("hi"), &Entry::assistant("hello")]
     );
+}
+
+#[test]
+fn round_trip_preserves_tool_call_and_result() {
+    // locks the canonical (provider-neutral) tool format across a round-trip.
+    let mut s = LinearSession::new(SessionId::new("s1"));
+    s.push(Entry::user("run the tool"));
+    s.push(Entry::ToolCall(ToolCall {
+        id: "call_1".into(),
+        name: "read_file".into(),
+        arguments: serde_json::json!({ "path": "src/lib.rs" }),
+    }));
+    s.push(Entry::ToolResult(ToolResult {
+        call_id: "call_1".into(),
+        output: "content".into(),
+    }));
+
+    let session = Session::Linear(s);
+    let json = session.to_json().expect("serializes");
+    let back = Session::from_json(&json).expect("deserializes");
+
+    assert_eq!(session, back);
 }
