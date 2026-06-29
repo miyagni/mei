@@ -1,4 +1,4 @@
-use mei_session::{Entry, LinearSession, NodeId, SessionError, SessionId, TreeSession};
+use mei_session::{Entry, LinearSession, NodeId, Session, SessionError, SessionId, TreeSession};
 
 #[test]
 fn compaction_entry_is_detected() {
@@ -88,4 +88,50 @@ fn set_active_to_unknown_node_errors() {
     let mut t = TreeSession::new(SessionId::new("s1"), Entry::user("a"));
     let err = t.set_active(NodeId::new(99)).unwrap_err();
     assert!(matches!(err, SessionError::UnknownNode(_)));
+}
+
+#[test]
+fn linear_round_trip_via_json() {
+    let mut s = LinearSession::new(SessionId::new("s1"));
+    s.push(Entry::user("hi"));
+    s.push(Entry::assistant("hello"));
+
+    let session = Session::Linear(s);
+    let json = session.to_json().expect("serializes");
+    let back = Session::from_json(&json).expect("deserializes");
+
+    assert_eq!(session, back);
+}
+
+#[test]
+fn tree_round_trip_via_json() {
+    let mut t = TreeSession::new(SessionId::new("s1"), Entry::user("a"));
+    t.push(Entry::assistant("b"));
+
+    let session = Session::Tree(t);
+    let json = session.to_json().expect("serializes");
+    let back = Session::from_json(&json).expect("deserializes");
+
+    assert_eq!(session, back);
+}
+
+#[test]
+fn from_json_rejects_corrupt_tree() {
+    // active points to a node that does not exist.
+    let json = r#"{"kind":"tree","id":"s1","nodes":[{"parent":null,"entry":{"role":"user","content":"a"}}],"active":99}"#;
+    assert!(Session::from_json(json).is_err());
+}
+
+#[test]
+fn session_model_context_reads_without_matching_kind() {
+    let mut t = TreeSession::new(SessionId::new("s1"), Entry::user("hi"));
+    t.push(Entry::assistant("hello"));
+    let session = Session::Tree(t);
+
+    // read id and model context off the enum directly, no match on Linear/Tree.
+    assert_eq!(session.id().as_str(), "s1");
+    assert_eq!(
+        session.model_context(),
+        vec![&Entry::user("hi"), &Entry::assistant("hello")]
+    );
 }

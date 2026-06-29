@@ -103,4 +103,23 @@ impl TreeSession {
         path.reverse(); // was active->root; becomes root->active.
         path
     }
+
+    pub(crate) fn validate(&self) -> Result<(), SessionError> {
+        if self.nodes.is_empty() {
+            return Err(SessionError::Corrupt("tree without a root"));
+        }
+        if self.nodes[0].parent.is_some() {
+            return Err(SessionError::Corrupt("root with a parent"));
+        }
+        for (i, node) in self.nodes.iter().enumerate().skip(1) {
+            match node.parent {
+                Some(parent) if (parent.index() as usize) < i => {}
+                _ => return Err(SessionError::Corrupt("invalid parent")),
+            }
+        }
+        if (self.active.index() as usize) >= self.nodes.len() {
+            return Err(SessionError::Corrupt("active points to a nonexistent node"));
+        }
+        Ok(())
+    }
 }

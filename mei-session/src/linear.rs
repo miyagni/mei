@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::entry::Entry;
+use crate::error::SessionError;
 use crate::ids::SessionId;
 
 /// Linear session: a single, editable path. Diverging truncates the old tail.
@@ -64,5 +65,12 @@ impl LinearSession {
         // The model context starts at the last compaction; with none, at the beginning.
         let start = active.iter().rposition(Entry::is_compaction).unwrap_or(0);
         active[start..].iter().collect()
+    }
+
+    pub(crate) fn validate(&self) -> Result<(), SessionError> {
+        if self.cursor > self.entries.len() {
+            return Err(SessionError::Corrupt("cursor out of range"));
+        }
+        Ok(())
     }
 }
