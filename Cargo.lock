@@ -64,6 +64,7 @@ name = "mei"
 version = "0.1.0"
 dependencies = [
  "mei-agent",
+ "mei-config",
  "mei-provider",
  "mei-session",
  "thiserror",
@@ -72,6 +73,13 @@ dependencies = [
 [[package]]
 name = "mei-agent"
 version = "0.1.0"
+
+[[package]]
+name = "mei-config"
+version = "0.1.0"
+dependencies = [
+ "thiserror",
+]
 
 [[package]]
 name = "mei-provider"

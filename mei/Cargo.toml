@@ -5,6 +5,7 @@ edition = "2021"
 
 [dependencies]
 mei-agent = { path = "../mei-agent" }
+mei-config = { path = "../mei-config" }
 mei-session = { path = "../mei-session" }
 mei-provider = { path = "../mei-provider" }
 thiserror = "2"

@@ -3,6 +3,7 @@ resolver = "2"
 members = [
     "mei",
     "mei-agent",
+    "mei-config",
     "mei-session",
     "mei-provider",
 ]
