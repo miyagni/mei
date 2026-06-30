@@ -12,6 +12,7 @@ codegen = ["dep:ureq"]
 
 [dependencies]
 mei-config = { path = "../mei-config" }
+futures-core = "0.3"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "2"

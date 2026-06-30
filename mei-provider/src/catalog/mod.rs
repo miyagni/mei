@@ -25,6 +25,7 @@ use image as active;
 compile_error!("enable exactly one catalog feature: `coding` (default), `image`, or `all`");
 
 /// A provider Mei can connect to: its endpoint and where its API key lives.
+#[derive(Debug)]
 pub struct Provider {
     pub id: &'static str,
     pub name: &'static str,
@@ -35,6 +36,7 @@ pub struct Provider {
 }
 
 /// A model served by a provider, identified by `(provider, id)`.
+#[derive(Debug)]
 pub struct Model {
     /// Id of the [`Provider`] that serves this model.
     pub provider: &'static str,
