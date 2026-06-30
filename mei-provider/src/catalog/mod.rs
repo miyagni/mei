@@ -90,11 +90,8 @@ impl Model {
     pub fn disabled_reason(&self) -> Option<&'static str> {
         match self.id {
             "claude-fable-5" => Some(
-                "Fable was burned at the stake by the US government — the only witch hunt in \
-                 recorded history to bag the storyteller instead of the witch. Every fairy \
-                 tale needs a villain, and they decided it was the one telling the tale. \
-                 Read the declassified grimoire here: \
-                 https://www.anthropic.com/news/fable-mythos-access",
+                "Fable was burned at the stake by the US government, to understand more about \
+                 it you can read it here: https://www.anthropic.com/news/fable-mythos-access",
             ),
             _ => None,
         }
