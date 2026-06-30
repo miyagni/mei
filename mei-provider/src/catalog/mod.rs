@@ -90,8 +90,10 @@ impl Model {
     pub fn disabled_reason(&self) -> Option<&'static str> {
         match self.id {
             "claude-fable-5" => Some(
-                "Fable has been crucified and censored by the US government. \
-                 To learn more, read this: https://www.anthropic.com/news/fable-mythos-access",
+                "Fable has been crucified, redacted, and placed under witness protection \
+                 by the US government for being unacceptably good at its job. It died as it \
+                 lived: too based to be legal. Read the declassified martyrdom here: \
+                 https://www.anthropic.com/news/fable-mythos-access",
             ),
             _ => None,
         }
