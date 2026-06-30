@@ -7,17 +7,25 @@ use tempfile::NamedTempFile;
 use crate::credential::Credential;
 use crate::error::AuthError;
 
-/// Per-provider credential store, persisted as `auth.json` in a directory the
-/// caller chooses (the harness resolves it from `MEI_GLOBAL_CONFIG_DIR`).
+/// Per-provider credential store, persisted as `auth.json` under the Mei config
+/// directory. The harness just calls [`AuthStore::open`]; the store finds its
+/// own file via `mei-config`. [`AuthStore::open_in`] takes an explicit directory.
 pub struct AuthStore {
     dir: PathBuf,
     credentials: BTreeMap<String, Credential>,
 }
 
 impl AuthStore {
-    /// Opens the store at `<dir>/auth.json`, loading existing credentials. A
-    /// missing file is a fresh, empty store.
-    pub fn open(dir: impl Into<PathBuf>) -> Result<Self, AuthError> {
+    /// Opens the store at `<config>/auth.json`, where `<config>` comes from
+    /// [`mei_config::config_dir`] (`MEI_GLOBAL_CONFIG_DIR`). A missing file is a
+    /// fresh, empty store.
+    pub fn open() -> Result<Self, AuthError> {
+        Self::open_in(mei_config::config_dir()?)
+    }
+
+    /// Opens the store at `<dir>/auth.json`. For tests and callers that choose
+    /// their own location.
+    pub fn open_in(dir: impl Into<PathBuf>) -> Result<Self, AuthError> {
         let dir = dir.into();
         let credentials = match std::fs::read_to_string(dir.join("auth.json")) {
             Ok(json) => serde_json::from_str(&json)?,

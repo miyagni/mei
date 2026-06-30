@@ -23,7 +23,7 @@ fn set_get_remove_persists_across_reopen() {
     let dir = tempfile::tempdir().expect("tempdir");
 
     {
-        let mut store = AuthStore::open(dir.path()).expect("open");
+        let mut store = AuthStore::open_in(dir.path()).expect("open");
         store
             .set("anthropic", Credential::ApiKey("sk-ant".into()))
             .expect("set anthropic");
@@ -33,7 +33,7 @@ fn set_get_remove_persists_across_reopen() {
     }
 
     // Reopened from disk: both credentials survived.
-    let store = AuthStore::open(dir.path()).expect("reopen");
+    let store = AuthStore::open_in(dir.path()).expect("reopen");
     assert_eq!(
         store.get("anthropic"),
         Some(&Credential::ApiKey("sk-ant".into()))
@@ -48,7 +48,7 @@ fn set_get_remove_persists_across_reopen() {
     assert!(!store.remove("openai").expect("remove again")); // already gone
 
     // Reopened: openai is gone, anthropic stays.
-    let store = AuthStore::open(dir.path()).expect("reopen");
+    let store = AuthStore::open_in(dir.path()).expect("reopen");
     assert_eq!(store.get("openai"), None);
     assert_eq!(
         store.get("anthropic"),
@@ -59,7 +59,7 @@ fn set_get_remove_persists_across_reopen() {
 #[test]
 fn open_missing_dir_is_empty_store() {
     let dir = tempfile::tempdir().expect("tempdir");
-    let store = AuthStore::open(dir.path().join("not-created-yet")).expect("open empty");
+    let store = AuthStore::open_in(dir.path().join("not-created-yet")).expect("open empty");
     assert!(store.get("anthropic").is_none());
     assert_eq!(store.providers().count(), 0);
 }

@@ -278,6 +278,7 @@ dependencies = [
 name = "mei-provider"
 version = "0.1.0"
 dependencies = [
+ "mei-config",
  "serde",
  "serde_json",
  "tempfile",
