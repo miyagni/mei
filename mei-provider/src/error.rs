@@ -1,9 +1,14 @@
 use thiserror::Error;
 
-/// Errors from the credential store. Only appears at a real boundary: config
-/// dir resolution, file io, and corrupt persisted data.
+/// Errors from the providers auth API: resolving auth for a request, and the
+/// credential store (config dir resolution, file io, corrupt persisted data).
 #[derive(Debug, Error)]
 pub enum AuthError {
+    /// The requested model is currently disabled. The message is the reason,
+    /// shown to the user verbatim.
+    #[error("{0}")]
+    ModelDisabled(&'static str),
+
     #[error("config dir: {0}")]
     Config(#[from] mei_config::ConfigError),
 

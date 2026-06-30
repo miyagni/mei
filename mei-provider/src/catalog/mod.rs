@@ -82,6 +82,20 @@ impl Model {
     pub fn provider(&self) -> Option<&'static Provider> {
         Provider::get(self.provider)
     }
+
+    /// The reason this model is currently disabled, if it is. While `Some`,
+    /// auth for a request to this model is refused (see `Auth::resolve`); the
+    /// model is still listed in the catalog. Editorial state, not from
+    /// models.dev — kept here by hand, never in the generated files.
+    pub fn disabled_reason(&self) -> Option<&'static str> {
+        match self.id {
+            "claude-fable-5" => Some(
+                "Fable has been crucified and censored by the US government. \
+                 To learn more, read this: https://www.anthropic.com/news/fable-mythos-access",
+            ),
+            _ => None,
+        }
+    }
 }
 
 #[cfg(all(test, feature = "coding"))]
@@ -112,6 +126,20 @@ mod tests {
                 m.id
             );
         }
+    }
+
+    #[test]
+    fn fable_is_disabled_with_a_reason() {
+        let fable =
+            Model::get("anthropic", "claude-fable-5").expect("fable is in the coding catalog");
+        let reason = fable.disabled_reason().expect("fable is disabled");
+        assert!(reason.contains("fable-mythos-access"));
+    }
+
+    #[test]
+    fn a_live_model_is_not_disabled() {
+        let opus = Model::get("anthropic", "claude-opus-4-8").expect("opus is in the catalog");
+        assert!(opus.disabled_reason().is_none());
     }
 
     #[test]
