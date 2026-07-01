@@ -6,7 +6,7 @@
 pub mod openai;
 
 use crate::auth::Auth;
-use crate::error::WireError;
+use crate::error::{ProviderError, WireError};
 use crate::event::ModelEvent;
 use crate::request::ChatRequest;
 
@@ -25,6 +25,12 @@ pub trait Wire {
 
     /// A fresh decoder for one response stream.
     fn decoder(&self) -> Self::Decoder;
+
+    /// Parse this provider's error envelope — from a non-success HTTP body or a
+    /// mid-stream error payload — into a structured [`ProviderError`]. Falls back
+    /// to the raw `body` as the message when it doesn't match the envelope, so
+    /// the error is surfaced, never hidden.
+    fn parse_error(&self, body: &str) -> ProviderError;
 }
 
 /// Decodes successive stream payloads into `ModelEvent`s, holding the cross-chunk

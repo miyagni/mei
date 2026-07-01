@@ -14,7 +14,7 @@ mod wire;
 pub use auth::Auth;
 pub use catalog::{Model, Provider};
 pub use credential::{Credential, OAuthToken};
-pub use error::{AuthError, StreamError, TransportError, WireError};
+pub use error::{AuthError, ProviderError, StreamError, TransportError, WireError};
 pub use event::{FinishReason, ModelEvent, Usage};
 pub use request::{ChatRequest, Message, Role, Tool};
 pub use store::AuthStore;

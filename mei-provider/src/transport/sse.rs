@@ -34,7 +34,8 @@ pub async fn stream<W: Wire>(
     if !response.status().is_success() {
         let status = response.status();
         let body = response.text().await.map_err(TransportError::from)?;
-        return Err(TransportError::Status { status, body }.into());
+        let error = wire.parse_error(&body);
+        return Err(TransportError::Status { status, error }.into());
     }
 
     let state = State {

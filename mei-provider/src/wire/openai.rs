@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 
 use super::{Decoder, Wire, WireRequest};
 use crate::auth::Auth;
-use crate::error::WireError;
+use crate::error::{ProviderError, WireError};
 use crate::event::{FinishReason, ModelEvent, Usage};
 use crate::request::{ChatRequest, Message, Role};
 
@@ -35,6 +35,20 @@ impl Wire for OpenAiCompat {
 
     fn decoder(&self) -> OpenAiDecoder {
         OpenAiDecoder::default()
+    }
+
+    fn parse_error(&self, body: &str) -> ProviderError {
+        match serde_json::from_str::<ErrorEnvelope>(body) {
+            Ok(env) => env.error.into_provider(env.request_id),
+            // Not the expected envelope — surface the raw body as the message
+            // rather than hide it.
+            Err(_) => ProviderError {
+                message: body.to_string(),
+                kind: None,
+                code: None,
+                request_id: None,
+            },
+        }
     }
 }
 
@@ -84,9 +98,33 @@ struct Chunk {
     error: Option<ApiError>,
 }
 
+/// The provider's error object, `{ message, type, code }`. Shared by the
+/// non-200 HTTP body (wrapped in `ErrorEnvelope`) and the mid-stream error chunk.
 #[derive(Deserialize)]
 struct ApiError {
     message: String,
+    #[serde(rename = "type")]
+    kind: Option<String>,
+    code: Option<String>,
+}
+
+impl ApiError {
+    fn into_provider(self, request_id: Option<String>) -> ProviderError {
+        ProviderError {
+            message: self.message,
+            kind: self.kind,
+            code: self.code,
+            request_id,
+        }
+    }
+}
+
+/// A non-success HTTP error body: `{ "error": { … }, "request_id"? }`. The
+/// `request_id` sits beside `error` (Anthropic sends it; OpenAI doesn't).
+#[derive(Deserialize)]
+struct ErrorEnvelope {
+    error: ApiError,
+    request_id: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -129,7 +167,7 @@ impl Decoder for OpenAiDecoder {
         // A provider error streamed after HTTP 200 must break loud, not vanish
         // into an empty chunk.
         if let Some(error) = chunk.error {
-            return Err(WireError::Provider(error.message));
+            return Err(WireError::Provider(error.into_provider(None)));
         }
 
         let mut events = Vec::new();
@@ -232,9 +270,30 @@ mod tests {
         let result =
             d.push(r#"{"error":{"message":"rate limit exceeded","type":"rate_limit_error"}}"#);
         match result {
-            Err(WireError::Provider(msg)) => assert_eq!(msg, "rate limit exceeded"),
+            Err(WireError::Provider(e)) => {
+                assert_eq!(e.message, "rate limit exceeded");
+                assert_eq!(e.kind.as_deref(), Some("rate_limit_error"));
+            }
             other => panic!("expected WireError::Provider, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn parse_error_extracts_the_envelope() {
+        let e = OpenAiCompat.parse_error(
+            r#"{"error":{"message":"Invalid API key","type":"invalid_request_error","code":"invalid_api_key"}}"#,
+        );
+        assert_eq!(e.message, "Invalid API key");
+        assert_eq!(e.kind.as_deref(), Some("invalid_request_error"));
+        assert_eq!(e.code.as_deref(), Some("invalid_api_key"));
+    }
+
+    #[test]
+    fn parse_error_falls_back_to_raw_body() {
+        // Not the expected envelope — the raw text is surfaced, not hidden.
+        let e = OpenAiCompat.parse_error("upstream connect error or disconnect/reset");
+        assert_eq!(e.message, "upstream connect error or disconnect/reset");
+        assert!(e.kind.is_none());
     }
 
     #[test]
