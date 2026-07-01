@@ -22,6 +22,8 @@ pub struct ChatRequest<'a> {
     pub messages: Vec<Message>,
     /// The tools the model may call (empty if none).
     pub tools: Vec<Tool>,
+    /// How the model may use those tools. Ignored when `tools` is empty.
+    pub tool_choice: ToolChoice,
 }
 
 impl<'a> ChatRequest<'a> {
@@ -32,6 +34,7 @@ impl<'a> ChatRequest<'a> {
             model,
             messages,
             tools: Vec::new(),
+            tool_choice: ToolChoice::Auto,
         }
     }
 }
@@ -75,9 +78,40 @@ pub enum Role {
 
 /// A tool the model may call.
 #[derive(Debug, Clone)]
+#[non_exhaustive]
 pub struct Tool {
     pub name: String,
     pub description: String,
-    /// JSON Schema for the parameters, as a JSON object string.
-    pub parameters: String,
+    /// JSON Schema for the parameters — a typed schema, never hand-written JSON.
+    /// Build it with `schemars::schema_for!(YourArgs)`.
+    pub parameters: schemars::Schema,
+}
+
+impl Tool {
+    pub fn new(
+        name: impl Into<String>,
+        description: impl Into<String>,
+        parameters: schemars::Schema,
+    ) -> Self {
+        Tool {
+            name: name.into(),
+            description: description.into(),
+            parameters,
+        }
+    }
+}
+
+/// How the model may use the available tools.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum ToolChoice {
+    /// The model decides whether and which tool to call.
+    #[default]
+    Auto,
+    /// The model must not call a tool this turn.
+    None,
+    /// The model must call some tool.
+    Required,
+    /// The model must call this specific tool, by name.
+    Function(String),
 }

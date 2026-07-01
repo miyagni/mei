@@ -16,7 +16,7 @@ pub use catalog::{Model, Provider};
 pub use credential::{Credential, OAuthToken};
 pub use error::{AuthError, ProviderError, StreamError, TransportError, WireError};
 pub use event::{FinishReason, ModelEvent, Usage};
-pub use request::{ChatRequest, Message, Role, Tool};
+pub use request::{ChatRequest, Message, Role, Tool, ToolChoice};
 pub use store::AuthStore;
 pub use transport::{stream, EventStream};
 pub use wire::{Decoder, OpenAiCompat, Wire, WireRequest};

@@ -2,13 +2,15 @@
 //! provider (OpenAI, DeepSeek, opencode-zen, Groq, OpenRouter, …) — clones
 //! differ only in base URL + key, which live in `Auth`.
 
+use std::collections::BTreeMap;
+
 use serde::{Deserialize, Serialize};
 
 use super::{Decoder, Wire, WireRequest};
 use crate::auth::Auth;
 use crate::error::{ProviderError, WireError};
 use crate::event::{FinishReason, ModelEvent, Usage};
-use crate::request::{ChatRequest, Message, Role};
+use crate::request::{ChatRequest, Message, Role, Tool, ToolChoice};
 
 pub struct OpenAiCompat;
 
@@ -16,11 +18,20 @@ impl Wire for OpenAiCompat {
     type Decoder = OpenAiDecoder;
 
     fn build(&self, auth: &Auth, request: &ChatRequest<'_>) -> Result<WireRequest, WireError> {
+        // Tool choice is meaningless without tools, and `auto` is the implicit
+        // default — so send it only when there are tools and the choice isn't Auto.
+        let tool_choice = if request.tools.is_empty() || request.tool_choice == ToolChoice::Auto {
+            None
+        } else {
+            Some(WireToolChoice::from(&request.tool_choice))
+        };
         let body = Body {
             model: request.model.id,
             messages: request.messages.iter().map(WireMessage::from).collect(),
             stream: true,
             stream_options: StreamOptions { include_usage: true },
+            tools: request.tools.iter().map(WireTool::from).collect(),
+            tool_choice,
         };
         Ok(WireRequest {
             path: "/chat/completions",
@@ -60,11 +71,74 @@ struct Body<'a> {
     messages: Vec<WireMessage<'a>>,
     stream: bool,
     stream_options: StreamOptions,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    tools: Vec<WireTool<'a>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    tool_choice: Option<WireToolChoice<'a>>,
 }
 
 #[derive(Serialize)]
 struct StreamOptions {
     include_usage: bool,
+}
+
+#[derive(Serialize)]
+struct WireTool<'a> {
+    #[serde(rename = "type")]
+    kind: &'static str,
+    function: WireFunction<'a>,
+}
+
+#[derive(Serialize)]
+struct WireFunction<'a> {
+    name: &'a str,
+    description: &'a str,
+    parameters: &'a schemars::Schema,
+}
+
+impl<'a> From<&'a Tool> for WireTool<'a> {
+    fn from(t: &'a Tool) -> Self {
+        WireTool {
+            kind: "function",
+            function: WireFunction {
+                name: &t.name,
+                description: &t.description,
+                parameters: &t.parameters,
+            },
+        }
+    }
+}
+
+/// OpenAI's `tool_choice`: either a mode string (`"auto"`/`"none"`/`"required"`)
+/// or `{ "type": "function", "function": { "name": … } }`.
+#[derive(Serialize)]
+#[serde(untagged)]
+enum WireToolChoice<'a> {
+    Mode(&'static str),
+    Named {
+        #[serde(rename = "type")]
+        kind: &'static str,
+        function: NamedFn<'a>,
+    },
+}
+
+#[derive(Serialize)]
+struct NamedFn<'a> {
+    name: &'a str,
+}
+
+impl<'a> From<&'a ToolChoice> for WireToolChoice<'a> {
+    fn from(tc: &'a ToolChoice) -> Self {
+        match tc {
+            ToolChoice::Auto => WireToolChoice::Mode("auto"),
+            ToolChoice::None => WireToolChoice::Mode("none"),
+            ToolChoice::Required => WireToolChoice::Mode("required"),
+            ToolChoice::Function(name) => WireToolChoice::Named {
+                kind: "function",
+                function: NamedFn { name },
+            },
+        }
+    }
 }
 
 #[derive(Serialize)]
@@ -138,6 +212,24 @@ struct Choice {
 struct Delta {
     content: Option<String>,
     reasoning_content: Option<String>,
+    #[serde(default)]
+    tool_calls: Vec<ToolCallFragment>,
+}
+
+/// One streamed piece of a tool call, keyed by `index`. The first fragment for
+/// an index carries `id` + `function.name`; later ones append `arguments`.
+#[derive(Deserialize)]
+struct ToolCallFragment {
+    index: u32,
+    id: Option<String>,
+    function: Option<FunctionFragment>,
+}
+
+#[derive(Deserialize)]
+struct FunctionFragment {
+    name: Option<String>,
+    #[serde(default)]
+    arguments: String,
 }
 
 #[derive(Deserialize)]
@@ -154,6 +246,16 @@ struct WireUsage {
 pub struct OpenAiDecoder {
     finish_reason: Option<FinishReason>,
     usage: Option<Usage>,
+    /// Tool calls being assembled, keyed by `index` (order preserved). Emitted
+    /// whole at stream end.
+    tool_calls: BTreeMap<u32, PartialToolCall>,
+}
+
+#[derive(Default)]
+struct PartialToolCall {
+    id: String,
+    name: String,
+    arguments: String,
 }
 
 impl Decoder for OpenAiDecoder {
@@ -181,6 +283,18 @@ impl Decoder for OpenAiDecoder {
                     events.push(ModelEvent::TextDelta(text));
                 }
             }
+            for frag in choice.delta.tool_calls {
+                let call = self.tool_calls.entry(frag.index).or_default();
+                if let Some(id) = frag.id {
+                    call.id = id;
+                }
+                if let Some(function) = frag.function {
+                    if let Some(name) = function.name {
+                        call.name = name;
+                    }
+                    call.arguments.push_str(&function.arguments);
+                }
+            }
             if let Some(reason) = choice.finish_reason {
                 self.finish_reason = Some(map_reason(reason));
             }
@@ -195,13 +309,31 @@ impl Decoder for OpenAiDecoder {
     }
 
     fn end(&mut self) -> Result<Vec<ModelEvent>, WireError> {
-        match self.finish_reason.take() {
-            Some(reason) => Ok(vec![ModelEvent::Finish {
-                reason,
-                usage: self.usage.take(),
-            }]),
-            None => Ok(Vec::new()),
+        // No finish reason means the stream was cut/cancelled: emit nothing (not
+        // even partial tool calls) — the absence of Finish is the incomplete signal.
+        let Some(reason) = self.finish_reason.take() else {
+            return Ok(Vec::new());
+        };
+
+        let mut events = Vec::new();
+        for (_index, call) in std::mem::take(&mut self.tool_calls) {
+            if call.id.is_empty() || call.name.is_empty() {
+                return Err(WireError::IncompleteToolCall(format!(
+                    "id={:?}, name={:?}",
+                    call.id, call.name
+                )));
+            }
+            events.push(ModelEvent::ToolCall {
+                id: call.id,
+                name: call.name,
+                arguments: call.arguments,
+            });
         }
+        events.push(ModelEvent::Finish {
+            reason,
+            usage: self.usage.take(),
+        });
+        Ok(events)
     }
 }
 
@@ -294,6 +426,76 @@ mod tests {
         let e = OpenAiCompat.parse_error("upstream connect error or disconnect/reset");
         assert_eq!(e.message, "upstream connect error or disconnect/reset");
         assert!(e.kind.is_none());
+    }
+
+    #[test]
+    fn assembles_a_tool_call_across_fragments() {
+        let mut d = OpenAiDecoder::default();
+        d.push(r#"{"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_1","function":{"name":"get_weather","arguments":"{\"loc"}}]},"finish_reason":null}]}"#).unwrap();
+        d.push(r#"{"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"ation\":\"SP\"}"}}]},"finish_reason":null}]}"#).unwrap();
+        d.push(r#"{"choices":[{"delta":{},"finish_reason":"tool_calls"}]}"#).unwrap();
+        assert_eq!(
+            d.end().unwrap(),
+            vec![
+                ModelEvent::ToolCall {
+                    id: "call_1".into(),
+                    name: "get_weather".into(),
+                    arguments: r#"{"location":"SP"}"#.into(),
+                },
+                ModelEvent::Finish { reason: FinishReason::ToolUse, usage: None },
+            ]
+        );
+    }
+
+    #[test]
+    fn assembles_parallel_tool_calls_in_index_order() {
+        let mut d = OpenAiDecoder::default();
+        d.push(r#"{"choices":[{"delta":{"tool_calls":[{"index":0,"id":"a","function":{"name":"f0","arguments":"{}"}},{"index":1,"id":"b","function":{"name":"f1","arguments":"{}"}}]},"finish_reason":null}]}"#).unwrap();
+        d.push(r#"{"choices":[{"delta":{},"finish_reason":"tool_calls"}]}"#).unwrap();
+        let events = d.end().unwrap();
+        assert_eq!(
+            events[0],
+            ModelEvent::ToolCall { id: "a".into(), name: "f0".into(), arguments: "{}".into() }
+        );
+        assert_eq!(
+            events[1],
+            ModelEvent::ToolCall { id: "b".into(), name: "f1".into(), arguments: "{}".into() }
+        );
+        assert!(matches!(events[2], ModelEvent::Finish { reason: FinishReason::ToolUse, .. }));
+    }
+
+    #[test]
+    fn incomplete_tool_call_breaks_loud() {
+        let mut d = OpenAiDecoder::default();
+        // id arrives, name never does — provider stream is inconsistent.
+        d.push(r#"{"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_x","function":{"arguments":"{}"}}]},"finish_reason":null}]}"#).unwrap();
+        d.push(r#"{"choices":[{"delta":{},"finish_reason":"tool_calls"}]}"#).unwrap();
+        assert!(matches!(d.end(), Err(WireError::IncompleteToolCall(_))));
+    }
+
+    #[test]
+    fn build_serializes_typed_tools_and_forced_choice() {
+        use crate::auth::Auth;
+        use crate::catalog::Model;
+        use crate::request::{ChatRequest, Message, Tool, ToolChoice};
+
+        #[derive(schemars::JsonSchema)]
+        #[allow(dead_code)]
+        struct Args {
+            city: String,
+        }
+
+        let model = Model { provider: "test", id: "m", name: "m", context: 0, max_output: 0 };
+        let auth = Auth { key: "k".into(), base_url: "https://x" };
+        let mut req = ChatRequest::new(&model, vec![Message::user("hi")]);
+        req.tools = vec![Tool::new("get_weather", "Get weather", schemars::schema_for!(Args))];
+        req.tool_choice = ToolChoice::Function("get_weather".into());
+
+        let body = OpenAiCompat.build(&auth, &req).unwrap().body;
+        assert!(body.contains(r#""name":"get_weather""#));
+        assert!(body.contains(r#""tool_choice""#));
+        // the schema is embedded as a JSON object, not a re-encoded string
+        assert!(body.contains(r#""properties""#));
     }
 
     #[test]

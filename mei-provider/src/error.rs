@@ -48,6 +48,10 @@ pub enum WireError {
     /// as an error, never swallowed as an empty chunk.
     #[error("provider error: {}", .0.message)]
     Provider(ProviderError),
+    /// A tool call finished assembling without an id or name — the provider's
+    /// tool-call stream was inconsistent.
+    #[error("incomplete tool call from provider: {0}")]
+    IncompleteToolCall(String),
 }
 
 /// A failure moving bytes to/from a provider over a transport (SSE today,
