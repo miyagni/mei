@@ -9,7 +9,11 @@ use crate::catalog::Model;
 
 /// A streamed chat turn: the model to call, the conversation so far, and the
 /// tools the model may invoke.
+///
+/// `#[non_exhaustive]`: build with [`ChatRequest::new`] and set the public
+/// fields you need, so optional params added later never break construction.
 #[derive(Debug, Clone)]
+#[non_exhaustive]
 pub struct ChatRequest<'a> {
     /// The model to run. Its `id` names the model on the wire; `max_output`
     /// bounds the response.
@@ -20,8 +24,21 @@ pub struct ChatRequest<'a> {
     pub tools: Vec<Tool>,
 }
 
+impl<'a> ChatRequest<'a> {
+    /// A turn for `model` over `messages`, no tools. Set the other fields on the
+    /// returned value as needed.
+    pub fn new(model: &'a Model, messages: Vec<Message>) -> Self {
+        ChatRequest {
+            model,
+            messages,
+            tools: Vec::new(),
+        }
+    }
+}
+
 /// One message in the conversation.
 #[derive(Debug, Clone)]
+#[non_exhaustive]
 pub struct Message {
     pub role: Role,
     /// The message text. Tool calls and tool results get their own message
@@ -29,8 +46,24 @@ pub struct Message {
     pub content: String,
 }
 
+impl Message {
+    /// A system / developer-instructions message.
+    pub fn system(content: impl Into<String>) -> Self {
+        Message { role: Role::System, content: content.into() }
+    }
+    /// An end-user message.
+    pub fn user(content: impl Into<String>) -> Self {
+        Message { role: Role::User, content: content.into() }
+    }
+    /// A model message.
+    pub fn assistant(content: impl Into<String>) -> Self {
+        Message { role: Role::Assistant, content: content.into() }
+    }
+}
+
 /// Who authored a message.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum Role {
     /// System / developer instructions.
     System,

@@ -6,6 +6,7 @@
 
 /// One event in a model's streamed response.
 #[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
 pub enum ModelEvent {
     /// A chunk of the model's reasoning ("thinking"), shown separately from the
     /// answer. Lets the user watch the model's direction and cancel the turn
@@ -34,6 +35,7 @@ pub enum ModelEvent {
 
 /// Why the model stopped producing the turn.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum FinishReason {
     /// Stopped on its own — the message is complete.
     Stop,

@@ -89,7 +89,7 @@ struct State<S, D> {
 mod real_stream {
     use super::*;
     use crate::catalog::Model;
-    use crate::request::{Message, Role};
+    use crate::request::Message;
     use crate::wire::OpenAiCompat;
 
     /// Hits a real OpenAI-compatible provider. Opt-in: run with
@@ -110,11 +110,7 @@ mod real_stream {
         let id: &'static str = Box::leak(model_id.into_boxed_str());
         let model = Model { provider: "test", id, name: "test", context: 0, max_output: 0 };
         let auth = Auth { key, base_url };
-        let request = ChatRequest {
-            model: &model,
-            messages: vec![Message { role: Role::User, content: "Say hello in one word.".into() }],
-            tools: Vec::new(),
-        };
+        let request = ChatRequest::new(&model, vec![Message::user("Say hello in one word.")]);
 
         let client = reqwest::Client::new();
         let mut events = stream(&client, &OpenAiCompat, &auth, request)
