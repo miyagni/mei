@@ -27,6 +27,7 @@ impl Wire for OpenAiCompat {
             headers: vec![
                 ("Authorization", format!("Bearer {}", auth.key)),
                 ("Content-Type", "application/json".to_string()),
+                ("Accept", "text/event-stream".to_string()),
             ],
             body: serde_json::to_string(&body)?,
         })
@@ -78,15 +79,24 @@ struct Chunk {
     #[serde(default)]
     choices: Vec<Choice>,
     usage: Option<WireUsage>,
+    /// An error the provider streamed after HTTP 200 (rate limit hit mid-turn,
+    /// backend failure). Its presence turns the chunk into a hard error.
+    error: Option<ApiError>,
+}
+
+#[derive(Deserialize)]
+struct ApiError {
+    message: String,
 }
 
 #[derive(Deserialize)]
 struct Choice {
+    #[serde(default)]
     delta: Delta,
     finish_reason: Option<String>,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Default)]
 struct Delta {
     content: Option<String>,
     reasoning_content: Option<String>,
@@ -115,6 +125,12 @@ impl Decoder for OpenAiDecoder {
             return Ok(Vec::new());
         }
         let chunk: Chunk = serde_json::from_str(payload)?;
+
+        // A provider error streamed after HTTP 200 must break loud, not vanish
+        // into an empty chunk.
+        if let Some(error) = chunk.error {
+            return Err(WireError::Provider(error.message));
+        }
 
         let mut events = Vec::new();
         if let Some(choice) = chunk.choices.into_iter().next() {
@@ -208,6 +224,17 @@ mod tests {
                 usage: None,
             }]
         );
+    }
+
+    #[test]
+    fn provider_error_chunk_breaks_loud() {
+        let mut d = OpenAiDecoder::default();
+        let result =
+            d.push(r#"{"error":{"message":"rate limit exceeded","type":"rate_limit_error"}}"#);
+        match result {
+            Err(WireError::Provider(msg)) => assert_eq!(msg, "rate limit exceeded"),
+            other => panic!("expected WireError::Provider, got {other:?}"),
+        }
     }
 
     #[test]

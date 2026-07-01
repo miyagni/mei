@@ -25,6 +25,10 @@ pub enum AuthError {
 pub enum WireError {
     #[error("decoding provider json: {0}")]
     Json(#[from] serde_json::Error),
+    /// The provider sent an error payload mid-stream (after HTTP 200). Surfaced
+    /// as an error, never swallowed as an empty chunk.
+    #[error("provider error: {0}")]
+    Provider(String),
 }
 
 /// A failure moving bytes to/from a provider over a transport (SSE today,
