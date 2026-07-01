@@ -60,9 +60,12 @@ one story each.
 - HTTP is async (`reqwest` + `tokio`): `reqwest` with `default-features = false` +
   `rustls-tls` (never native-tls), only the features a turn needs (`stream`). Lean
   within async — trim what each dep drags in at runtime.
-- **Never default-coalesce absent data** (`?? []`, `unwrap_or_default()` to hide a missing
-  field, faking `0`/`""`). Absent → `Option`/error, visible; let it break loud.
-  `Option` only when genuinely nullable.
+- **Never fake-fill genuinely-absent data.** In Rust the defensive null shows up as
+  Option-coalescing: `.unwrap_or_default()`, `.unwrap_or(vec![]/0/"")`, a `None => <default>`
+  arm, or `.ok()` swallowing an error — all papering over a value that didn't arrive. Keep
+  absence honest: `Option`/`None`, or return an error; let it break loud. `Option` only when
+  genuinely nullable. (A default IS fine when absence is legitimately empty — e.g.
+  `#[serde(default)]` on a field that's truly optional.)
 - All code/comments/strings in **English** (chat stays pt-BR).
 - Tests validate real behavior and leave nothing on disk — use `tempfile::tempdir()`,
   never the project/home dir.
