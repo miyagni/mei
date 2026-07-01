@@ -4,10 +4,9 @@ Rust framework for **building AI agents** — the product is the framework, not 
 UI-agnostic: terminal first, desktop/server too; never browser/WASM.
 
 ## Non-negotiable product bars
-- **Stupidly low RAM.** A terminal app rendering text has no excuse to exceed ~50 MB —
-  and 50 MB is already too much; aim single-digit MB. Stream, don't retain (never buffer
-  the whole catalog/transcript/response). Low footprint is the differentiator vs the
-  baggage of TS agent frameworks — it's the reason to exist, not asceticism.
+- **Low RAM is common sense, not a special goal.** A text terminal app belongs in
+  single-digit MB. Stream, don't retain (never buffer the whole catalog/transcript/response);
+  don't drag in bloat. This is the whole point of Mei vs the baggage of TS agent frameworks.
 - **Minimal output.** Solve it with as little code as the problem takes; LOC is not a score.
 - **DX is the product.** It's a framework: the public API's ergonomics decide adoption.
   Judge every design by "is this obvious and pleasant for someone building an agent?"
