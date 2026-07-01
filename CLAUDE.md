@@ -39,8 +39,17 @@ cargo clippy --all-targets      # keep it warning-free
   `MEI_TEST_BASE_URL` / `MEI_TEST_API_KEY` / `MEI_TEST_MODEL`:
   `cargo test -p mei-provider -- --ignored`
 
+## Gotchas
+- **cargo on PowerShell:** compile/progress output goes to **stderr**; piping `2>&1`
+  wraps it in a `NativeCommandError` that looks like a failure even on success. Judge
+  by the `test result:` / `Finished` line or the exit code, not the red wrapper.
+
 ## VCS: jj (colocated), not git
 Use `jj`, not `git`. In PowerShell quote `@-` as `'@-'`.
+Prefix `jj describe`/`split`/`commit` with `JJ_EDITOR=true` and pass `-m` so jj
+doesn't open an interactive editor and hang the shell. Atomic split:
+`JJ_EDITOR=true jj split <path> -m "..."` puts those paths in a new commit, the
+rest stays in `@`.
 Push: `jj bookmark set main -r @ && jj git push --remote origin --bookmark main`.
 Remote is **miyagni/mei** (not `hakenshi/mei`). Commits: Conventional Commits, atomic,
 one story each.
@@ -48,6 +57,9 @@ one story each.
 ## Library code style (the lib crates are an SDK)
 - No `println!`/`eprintln!`/`dbg!`/`panic!` — return `Result` or data.
 - Errors via `thiserror`; JSON via `serde`/`serde_json` (no hand-rolled parsers).
+- HTTP is async (`reqwest` + `tokio`): `reqwest` with `default-features = false` +
+  `rustls-tls` (never native-tls), only the features a turn needs (`stream`). Lean
+  within async — trim what each dep drags in at runtime.
 - **Never default-coalesce absent data** (`?? []`, `unwrap_or_default()` to hide a missing
   field, faking `0`/`""`). Absent → `Option`/error, visible; let it break loud.
   `Option` only when genuinely nullable.
