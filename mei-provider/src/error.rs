@@ -1,3 +1,4 @@
+use reqwest::StatusCode;
 use thiserror::Error;
 
 /// Errors from the providers auth API: resolving auth for a request, and the
@@ -17,4 +18,33 @@ pub enum AuthError {
 
     #[error("invalid auth store json: {0}")]
     Json(#[from] serde_json::Error),
+}
+
+/// A failure decoding a provider's wire format into `ModelEvent`s.
+#[derive(Debug, Error)]
+pub enum WireError {
+    #[error("decoding provider json: {0}")]
+    Json(#[from] serde_json::Error),
+}
+
+/// A failure moving bytes to/from a provider over a transport (SSE today,
+/// WebSocket later).
+#[derive(Debug, Error)]
+pub enum TransportError {
+    #[error("http: {0}")]
+    Http(#[from] reqwest::Error),
+    #[error("event stream framing: {0}")]
+    Frame(#[from] eventsource_stream::EventStreamError<reqwest::Error>),
+    #[error("provider returned {status}: {body}")]
+    Status { status: StatusCode, body: String },
+}
+
+/// Either layer of the streaming pipeline failed: the transport, or the wire
+/// decoding its bytes.
+#[derive(Debug, Error)]
+pub enum StreamError {
+    #[error(transparent)]
+    Transport(#[from] TransportError),
+    #[error(transparent)]
+    Wire(#[from] WireError),
 }

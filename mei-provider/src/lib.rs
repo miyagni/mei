@@ -9,12 +9,14 @@ mod event;
 mod request;
 mod store;
 mod transport;
+mod wire;
 
 pub use auth::Auth;
 pub use catalog::{Model, Provider};
 pub use credential::{Credential, OAuthToken};
-pub use error::AuthError;
+pub use error::{AuthError, StreamError, TransportError, WireError};
 pub use event::{FinishReason, ModelEvent, Usage};
 pub use request::{ChatRequest, Message, Role, Tool};
 pub use store::AuthStore;
-pub use transport::{EventStream, Transport, TransportError};
+pub use transport::{stream, EventStream};
+pub use wire::{Decoder, OpenAiCompat, Wire, WireRequest};
