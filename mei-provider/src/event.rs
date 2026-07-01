@@ -25,7 +25,10 @@ pub enum ModelEvent {
     /// The turn is done; no more events follow.
     Finish {
         reason: FinishReason,
-        usage: Usage,
+        /// Token counts, when the provider reported them. Absent when usage was
+        /// never sent (`include_usage` off, a proxy dropped it) or the stream
+        /// was cut before it arrived — never faked as zero.
+        usage: Option<Usage>,
     },
 }
 
@@ -38,6 +41,9 @@ pub enum FinishReason {
     ToolUse,
     /// Hit the maximum output token limit.
     Length,
+    /// A reason outside the set above, preserved verbatim (DeepSeek
+    /// `insufficient_system_resource`, Gemini `OTHER`, …).
+    Other(String),
 }
 
 /// Token counts for a turn.
